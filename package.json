@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "oxlint src",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "icons": "pwa-assets-generator && mv assets-src/*.png public/ && rm assets-src/favicon.ico"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
@@ -19,10 +20,12 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vite-pwa/assets-generator": "^2.0.0",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.1.1",
+    "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0.4"
   }
 }
