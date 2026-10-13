@@ -14,9 +14,11 @@ import { ShoppingListView } from './components/ShoppingListView';
 import { RecipesView } from './components/RecipesView';
 import { RecipeModal } from './components/RecipeModal';
 import { DeleteModal } from './components/DeleteModal';
+import { LoginScreen } from './components/LoginScreen';
+import { useSession, signOut } from './hooks/useSession';
 
-export default function MealPlannerApp() {
-  const planner = usePlannerState();
+function MealPlannerApp({ userId }) {
+  const planner = usePlannerState(userId);
   const { loading, persons, plan, recipesDb, modal } = planner;
   const [activeTab, setActiveTab] = useState('plan'); // 'plan', 'list', 'meals'
   const [mobileView, setMobileView] = useState('today'); // 'today', 'week'
@@ -59,6 +61,7 @@ export default function MealPlannerApp() {
         persons={persons}
         onPersonsChange={planner.handlePersonsChange}
         onCreate={modal.handleOpenAddModal}
+        onSignOut={signOut}
       />
 
       {activeTab === 'plan' && (
@@ -115,4 +118,11 @@ export default function MealPlannerApp() {
       {modal.recipeToDelete && <DeleteModal modal={modal} recipesDb={recipesDb} />}
     </div>
   );
+}
+
+export default function App() {
+  const session = useSession();
+  if (session === undefined) return null;
+  if (!session) return <LoginScreen />;
+  return <MealPlannerApp userId={session.user.id} />;
 }

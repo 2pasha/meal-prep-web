@@ -1,19 +1,17 @@
 {
-  "name": "meal-planner",
+  "name": "meal-prep-web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://alinavovkov.github.io/meal-prep-web",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "oxlint src",
     "preview": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "test": "vitest run"
   },
   "dependencies": {
-    "firebase": "^12.16.0",
+    "@supabase/supabase-js": "^2.117.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
@@ -22,9 +20,9 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "gh-pages": "^6.3.0",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^5.0.4"
   }
 }
