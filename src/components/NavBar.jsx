@@ -1,6 +1,6 @@
 import { Minus, Plus } from './Icons';
 
-export function NavBar({ activeTab, onTabChange, shoppingItemsCount, persons, onPersonsChange, onCreate }) {
+export function NavBar({ activeTab, onTabChange, shoppingItemsCount, persons, onPersonsChange, onCreate, onSignOut }) {
   const tab = (id, label) => (
     <button
       key={id}
@@ -24,9 +24,12 @@ export function NavBar({ activeTab, onTabChange, shoppingItemsCount, persons, on
           <button onClick={() => onPersonsChange(persons + 1)} aria-label="Більше персон" className="flex h-6 w-6 items-center justify-center rounded-full border border-white/60 hover:bg-white/20"><Plus size={12} /></button>
         </div>
       </div>
+      <div className="flex items-center gap-6">
       <button onClick={onCreate} className="rounded-full border border-ink bg-sun px-[22px] py-2.5 text-[13px] font-bold text-ink hover:brightness-95">
         Створити страву
       </button>
+      <button onClick={onSignOut} className="text-xs font-semibold tracking-[0.1em] text-white/80 underline-offset-8 hover:underline">ВИЙТИ</button>
+      </div>
     </nav>
   );
 }
