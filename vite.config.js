@@ -27,6 +27,10 @@ export default defineConfig({
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
           { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        screenshots: [
+          { src: 'screenshots/wide.jpg', sizes: '1280x720', type: 'image/jpeg', form_factor: 'wide', label: 'Планувальник на сьогодні' },
+          { src: 'screenshots/narrow.jpg', sizes: '780x1688', type: 'image/jpeg', form_factor: 'narrow', label: 'Меню на тиждень' },
+        ],
       },
       workbox: {
         navigateFallback: '/index.html',
