@@ -1,36 +1,24 @@
-import { useState, useMemo, useEffect } from 'react';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db, appId } from '../lib/firebase';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   INGREDIENT_CATEGORIES,
-  INITIAL_RECIPES_DB,
-  NEW_SEED_RECIPES,
-  SEED_VERSION,
   normalizeRecipes,
   DAYS_OF_WEEK,
   MEAL_TYPES,
   getCategoryForIngredient,
   parseSmartText,
 } from '../lib/planner';
+import { getWeekInfo } from '../lib/dates';
+import * as db from '../lib/db';
 
 const EMPTY_META = { mealType: '', minutes: '', kcal: '', vegetarian: false, photo: null, description: '' };
 
-export function usePlannerState() {
+export function usePlannerState(userId) {
+  const week = useMemo(() => getWeekInfo(), []);
   const [persons, setPersons] = useState(2);
-  const [recipesDb, setRecipesDb] = useState(INITIAL_RECIPES_DB);
+  const [recipesDb, setRecipesDb] = useState({});
   const [checkedItems, setCheckedItems] = useState({});
   const [extraItems, setExtraItems] = useState([]);
-  const [plan, setPlan] = useState(() => {
-    const initialPlan = {};
-    DAYS_OF_WEEK.forEach(day => {
-      initialPlan[day] = {};
-      MEAL_TYPES.forEach(meal => {
-        initialPlan[day][meal] = ''; 
-      });
-    });
-    return initialPlan;
-  });
+  const [plan, setPlan] = useState(db.emptyPlan);
 
   const recipes = useMemo(() => normalizeRecipes(recipesDb), [recipesDb]);
 
@@ -46,81 +34,45 @@ export function usePlannerState() {
   // Custom Confirmation Modal State
   const [recipeToDelete, setRecipeToDelete] = useState(null);
 
-  // Auth States
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Помилка авторизації:", error);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
+  const load = useCallback(async () => {
+    try {
+      const data = await db.loadAll(week);
+      setPersons(data.persons);
+      setRecipesDb(data.recipesDb);
+      setPlan(data.plan);
+      setCheckedItems(data.checkedItems);
+      setExtraItems(data.extraItems);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+    setLoading(false);
+  }, [week]);
 
-  useEffect(() => {
-    if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'state');
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.persons !== undefined) setPersons(data.persons);
-        if (data.recipesDb) {
-          if ((data.seedVersion || 1) < SEED_VERSION) {
-            const merged = { ...NEW_SEED_RECIPES, ...data.recipesDb };
-            setRecipesDb(merged);
-            setDoc(docRef, { recipesDb: merged, seedVersion: SEED_VERSION }, { merge: true }).catch(err => console.error('Seed migration failed:', err));
-          } else {
-            setRecipesDb(data.recipesDb);
-          }
-        }
-        if (data.plan) setPlan(data.plan);
-        if (data.checkedItems) setCheckedItems(data.checkedItems);
-        if (data.extraItems) setExtraItems(data.extraItems);
-      }
-      setLoading(false);
-    }, (error) => {
-      console.error("Error loading data:", error);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user]);
+  useEffect(() => { load(); }, [load]);
 
-  const updateCloudState = async (partialData) => {
-    if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'appData', 'state');
-    const data = partialData.recipesDb ? { ...partialData, seedVersion: SEED_VERSION } : partialData;
-    await setDoc(docRef, data, { merge: true });
-  };
+  // Optimistic update: the UI changes at once; on a failed write we reload from the server.
+  const persist = (write) => write().catch(error => {
+    console.error('Save failed:', error);
+    load();
+  });
 
   const handlePersonsChange = (newPersons) => {
     const value = Math.max(1, newPersons);
     setPersons(value);
-    updateCloudState({ persons: value });
+    persist(() => db.savePersons(userId, value));
   };
 
   const handleMealSelect = (day, mealType, recipeId) => {
-    setPlan(prevPlan => {
-      const newPlan = { ...prevPlan, [day]: { ...prevPlan[day], [mealType]: recipeId } };
-      updateCloudState({ plan: newPlan });
-      return newPlan;
-    });
+    setPlan(prev => ({ ...prev, [day]: { ...prev[day], [mealType]: recipeId } }));
+    persist(() => db.setPlanEntry(userId, week.days[DAYS_OF_WEEK.indexOf(day)].iso, mealType, recipeId));
   };
 
   const handleClearPlan = () => {
-    const emptyPlan = {};
-    DAYS_OF_WEEK.forEach(day => {
-      emptyPlan[day] = {};
-      MEAL_TYPES.forEach(meal => emptyPlan[day][meal] = '');
-    });
-    setPlan(emptyPlan);
+    setPlan(db.emptyPlan());
     setCheckedItems({});
-    updateCloudState({ plan: emptyPlan, checkedItems: {} });
+    persist(() => db.clearWeek(week));
   };
 
   const handleOpenAddModal = () => {
@@ -154,29 +106,18 @@ export function usePlannerState() {
 
   const confirmDeleteRecipe = () => {
     if (!recipeToDelete) return;
-    
-    setRecipesDb(prev => {
-      const newDb = { ...prev };
-      delete newDb[recipeToDelete];
-      updateCloudState({ recipesDb: newDb });
-      return newDb;
-    });
+    const id = recipeToDelete;
 
-    setPlan(prevPlan => {
-      const newPlan = { ...prevPlan };
-      let planChanged = false;
-      DAYS_OF_WEEK.forEach(day => {
-        MEAL_TYPES.forEach(meal => {
-          if (newPlan[day][meal] === recipeToDelete) {
-            newPlan[day][meal] = '';
-            planChanged = true;
-          }
-        });
-      });
-      if (planChanged) updateCloudState({ plan: newPlan });
-      return newPlan;
+    setRecipesDb(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
     });
-    
+    // The DB cascades plan entries; mirror that locally.
+    setPlan(prev => Object.fromEntries(DAYS_OF_WEEK.map(day => [day,
+      Object.fromEntries(MEAL_TYPES.map(meal => [meal, prev[day][meal] === id ? '' : prev[day][meal]]))])));
+    persist(() => db.deleteRecipe(id));
+
     setRecipeToDelete(null);
     setIsAddRecipeModalOpen(false);
     setEditingRecipeId(null);
@@ -205,68 +146,65 @@ export function usePlannerState() {
 
   const handleRemoveIngredientRow = (index) => setNewRecipeIngredients(newRecipeIngredients.filter((_, i) => i !== index));
 
-  const handleSaveRecipe = () => {
+  const handleSaveRecipe = async () => {
     if (!newRecipeName.trim()) return;
     const validIngredients = newRecipeIngredients.filter(ing => ing.name.trim() && ing.amount);
-    const recipeIdToSave = editingRecipeId || `custom_${Date.now()}`;
+    const recipe = {
+      name: newRecipeName.trim(),
+      mealType: recipeMeta.mealType,
+      minutes: recipeMeta.minutes === '' ? null : Number(recipeMeta.minutes),
+      kcal: recipeMeta.kcal === '' ? null : Number(recipeMeta.kcal),
+      vegetarian: recipeMeta.vegetarian,
+      photo: recipeMeta.photo,
+      description: recipeMeta.description.trim(),
+      ingredients: validIngredients.map(ing => ({
+        name: ing.name.trim(),
+        amount: parseFloat(ing.amount),
+        unit: ing.unit,
+      })),
+    };
 
-    setRecipesDb(prev => {
-      const newDb = {
-        ...prev,
-        [recipeIdToSave]: {
-          ...prev[recipeIdToSave],
-          name: newRecipeName,
-          mealType: recipeMeta.mealType,
-          minutes: recipeMeta.minutes === '' ? null : Number(recipeMeta.minutes),
-          kcal: recipeMeta.kcal === '' ? null : Number(recipeMeta.kcal),
-          vegetarian: recipeMeta.vegetarian,
-          photo: recipeMeta.photo,
-          description: recipeMeta.description.trim(),
-          ingredients: validIngredients.map(ing => ({
-            name: ing.name.trim(),
-            amount: parseFloat(ing.amount),
-            unit: ing.unit
-          }))
-        }
-      };
-      updateCloudState({ recipesDb: newDb });
-      return newDb;
-    });
+    try {
+      let id = editingRecipeId;
+      if (id) await db.updateRecipe(id, recipe);
+      else id = await db.createRecipe(userId, recipe);
+      setRecipesDb(prev => ({ ...prev, [id]: { favorite: false, ...prev[id], ...recipe } }));
+    } catch (error) {
+      console.error('Save recipe failed:', error);
+      load();
+    }
 
     setIsAddRecipeModalOpen(false);
     setEditingRecipeId(null);
   };
 
   const toggleFavorite = (recipeId) => {
-    setRecipesDb(prev => {
-      if (!prev[recipeId]) return prev;
-      const newDb = { ...prev, [recipeId]: { ...prev[recipeId], favorite: !recipes[recipeId]?.favorite } };
-      updateCloudState({ recipesDb: newDb });
-      return newDb;
-    });
+    const next = !recipes[recipeId]?.favorite;
+    setRecipesDb(prev => (prev[recipeId] ? { ...prev, [recipeId]: { ...prev[recipeId], favorite: next } } : prev));
+    persist(() => db.setFavorite(recipeId, next));
   };
 
-  const addExtraItem = ({ name, amount, unit }) => {
+  const addExtraItem = async ({ name, amount, unit }) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     const parsed = parseFloat(String(amount).replace(',', '.'));
-    const newItems = [...extraItems, { id: `x${Date.now()}`, name: trimmed, amount: Number.isNaN(parsed) ? 1 : parsed, unit }];
-    setExtraItems(newItems);
-    updateCloudState({ extraItems: newItems });
+    try {
+      const item = await db.addExtra(userId, week.weekStart, { name: trimmed, amount: Number.isNaN(parsed) ? 1 : parsed, unit });
+      setExtraItems(prev => [...prev, item]);
+    } catch (error) {
+      console.error('Add item failed:', error);
+    }
   };
 
   const removeExtraItem = (extraId) => {
-    const newItems = extraItems.filter(item => item.id !== extraId);
-    setExtraItems(newItems);
-    updateCloudState({ extraItems: newItems });
+    setExtraItems(prev => prev.filter(item => item.id !== extraId));
+    persist(() => db.removeExtra(extraId));
   };
 
   const toggleItemCheck = (key) => {
-    setCheckedItems(prev => {
-      const newChecked = { ...prev, [key]: !prev[key] };
-      updateCloudState({ checkedItems: newChecked });
-      return newChecked;
-    });
+    const next = !checkedItems[key];
+    setCheckedItems(prev => ({ ...prev, [key]: next }));
+    persist(() => db.setItemChecked(userId, week.weekStart, key, next));
   };
 
   const shoppingListCategories = useMemo(() => {

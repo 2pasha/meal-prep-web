@@ -17,8 +17,8 @@ import { DeleteModal } from './components/DeleteModal';
 import { LoginScreen } from './components/LoginScreen';
 import { useSession, signOut } from './hooks/useSession';
 
-function MealPlannerApp() {
-  const planner = usePlannerState();
+function MealPlannerApp({ userId }) {
+  const planner = usePlannerState(userId);
   const { loading, persons, plan, recipesDb, modal } = planner;
   const [activeTab, setActiveTab] = useState('plan'); // 'plan', 'list', 'meals'
   const [mobileView, setMobileView] = useState('today'); // 'today', 'week'
@@ -124,5 +124,5 @@ export default function App() {
   const session = useSession();
   if (session === undefined) return null;
   if (!session) return <LoginScreen />;
-  return <MealPlannerApp />;
+  return <MealPlannerApp userId={session.user.id} />;
 }

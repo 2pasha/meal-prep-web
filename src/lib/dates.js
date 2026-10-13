@@ -9,6 +9,8 @@ const getIsoWeekNumber = (date) => {
   return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 };
 
+const toIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export const getWeekInfo = (now = new Date()) => {
   const todayIndex = (now.getDay() + 6) % 7;
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - todayIndex);
@@ -17,6 +19,7 @@ export const getWeekInfo = (now = new Date()) => {
     return {
       name,
       index: i,
+      iso: toIso(date),
       number: String(i + 1).padStart(2, '0') + '.',
       day: date.getDate(),
       month: MONTHS_GEN[date.getMonth()],
@@ -29,7 +32,7 @@ export const getWeekInfo = (now = new Date()) => {
   const rangeLabel = (first.month === last.month
     ? `${first.day} – ${last.day} ${last.month}`
     : `${first.day} ${first.month} – ${last.day} ${last.month}`).toUpperCase();
-  return { days, todayIndex, today: days[todayIndex], rangeLabel, weekNumber: getIsoWeekNumber(now) };
+  return { days, weekStart: days[0].iso, weekEnd: days[6].iso, todayIndex, today: days[todayIndex], rangeLabel, weekNumber: getIsoWeekNumber(now) };
 };
 
 export const pluralPersons = (n) => (n === 1 ? 'персону' : n > 1 && n < 5 ? 'персони' : 'персон');
