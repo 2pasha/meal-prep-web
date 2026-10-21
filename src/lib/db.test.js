@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./supabase', () => ({ supabase: {} }))
 
-const { rowToRecipe, planFromEntries, emptyPlan } = await import('./db')
+const { rowToRecipe, recipeToRow, planFromEntries, emptyPlan } = await import('./db')
 const { getWeekInfo } = await import('./dates')
 
 describe('rowToRecipe', () => {
@@ -32,6 +32,31 @@ describe('rowToRecipe', () => {
     const recipe = rowToRecipe({ name: { en: 'Soup' }, meal_type: null, recipe_ingredients: [] })
     expect(recipe.name).toBe('Soup')
     expect(recipe.mealType).toBe('')
+  })
+})
+
+describe('recipe steps, source and tags', () => {
+  it('reads them from a row', () => {
+    const recipe = rowToRecipe({
+      name: { uk: 'Омлет' }, meal_type: 'breakfast', recipe_ingredients: [],
+      steps: { uk: ['Збити яйця', 'Смажити 3 хв'] }, source_url: 'https://example.com/omelet', tags: ['швидко'],
+    })
+    expect(recipe).toMatchObject({ steps: ['Збити яйця', 'Смажити 3 хв'], sourceUrl: 'https://example.com/omelet', tags: ['швидко'] })
+  })
+
+  it('defaults for rows created before the upgrade', () => {
+    const recipe = rowToRecipe({ name: { uk: 'Борщ' }, meal_type: 'lunch', recipe_ingredients: [] })
+    expect(recipe).toMatchObject({ steps: [], sourceUrl: '', tags: [] })
+  })
+
+  it('round-trips through recipeToRow', () => {
+    const row = recipeToRow({ name: 'Омлет', mealType: 'Сніданок', steps: ['Збити яйця'], sourceUrl: 'https://example.com', tags: ['швидко'] })
+    expect(row).toMatchObject({ steps: { uk: ['Збити яйця'] }, source_url: 'https://example.com', tags: ['швидко'] })
+    expect(rowToRecipe({ ...row, recipe_ingredients: [] })).toMatchObject({ steps: ['Збити яйця'], sourceUrl: 'https://example.com' })
+  })
+
+  it('stores empty steps and source as null', () => {
+    expect(recipeToRow({ name: 'X', mealType: '', steps: [], sourceUrl: '' })).toMatchObject({ steps: null, source_url: null, tags: [] })
   })
 })
 

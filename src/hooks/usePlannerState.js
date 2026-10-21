@@ -5,12 +5,12 @@ import {
   DAYS_OF_WEEK,
   MEAL_TYPES,
   getCategoryForIngredient,
-  parseSmartText,
 } from '../lib/planner';
 import { getWeekInfo } from '../lib/dates';
+import { isStoragePhoto } from '../data/photos';
+import { isValidUrl } from '../lib/recipeDraft';
 import * as db from '../lib/db';
-
-const EMPTY_META = { mealType: '', minutes: '', kcal: '', vegetarian: false, photo: null, description: '' };
+import { useRecipeForm } from './useRecipeForm';
 
 export function usePlannerState(userId) {
   const week = useMemo(() => getWeekInfo(), []);
@@ -25,12 +25,10 @@ export function usePlannerState(userId) {
   // Modal States
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false);
   const [editingRecipeId, setEditingRecipeId] = useState(null); 
-  const [newRecipeName, setNewRecipeName] = useState('');
-  const [newRecipeIngredients, setNewRecipeIngredients] = useState([{ name: '', amount: '', unit: 'г' }]);
-  const [recipeMeta, setRecipeMeta] = useState(EMPTY_META);
-  const [smartText, setSmartText] = useState('');
-  const [smartError, setSmartError] = useState('');
-  
+  const form = useRecipeForm();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
   // Custom Confirmation Modal State
   const [recipeToDelete, setRecipeToDelete] = useState(null);
 
@@ -76,37 +74,25 @@ export function usePlannerState(userId) {
   };
 
   const handleOpenAddModal = () => {
-    setNewRecipeName('');
-    setNewRecipeIngredients([{ name: '', amount: '', unit: 'г' }]);
-    setRecipeMeta(EMPTY_META);
+    form.reset();
     setEditingRecipeId(null);
-    setSmartText('');
-    setSmartError('');
+    setSaveError('');
     setIsAddRecipeModalOpen(true);
   };
 
   const handleOpenEditModal = (recipeId) => {
     const recipe = recipes[recipeId];
     if (!recipe) return;
-    setRecipeMeta({
-      mealType: recipe.mealType || '',
-      minutes: recipe.minutes ?? '',
-      kcal: recipe.kcal ?? '',
-      vegetarian: !!recipe.vegetarian,
-      photo: recipe.photo || null,
-      description: recipe.description || '',
-    });
-    setNewRecipeName(recipe.name);
-    setNewRecipeIngredients(recipe.ingredients.length > 0 ? [...recipe.ingredients] : [{ name: '', amount: '', unit: 'г' }]);
+    form.load(recipe);
     setEditingRecipeId(recipeId);
-    setSmartText('');
-    setSmartError('');
+    setSaveError('');
     setIsAddRecipeModalOpen(true);
   };
 
   const confirmDeleteRecipe = () => {
     if (!recipeToDelete) return;
     const id = recipeToDelete;
+    const photo = recipesDb[id]?.photo;
 
     setRecipesDb(prev => {
       const next = { ...prev };
@@ -116,66 +102,46 @@ export function usePlannerState(userId) {
     // The DB cascades plan entries; mirror that locally.
     setPlan(prev => Object.fromEntries(DAYS_OF_WEEK.map(day => [day,
       Object.fromEntries(MEAL_TYPES.map(meal => [meal, prev[day][meal] === id ? '' : prev[day][meal]]))])));
-    persist(() => db.deleteRecipe(id));
+    persist(() => db.deleteRecipe(id).then(() => dropStoragePhoto(photo)));
 
     setRecipeToDelete(null);
     setIsAddRecipeModalOpen(false);
     setEditingRecipeId(null);
   };
 
-  const handleSmartImport = () => {
-    setSmartError('');
-    const parsed = parseSmartText(smartText);
-    if (parsed.length > 0) {
-      const current = newRecipeIngredients.filter(ing => ing.name.trim() !== '' || ing.amount !== '');
-      setNewRecipeIngredients([...current, ...parsed]);
-      setSmartText('');
-    } else {
-      setSmartError('Не вдалося розпізнати інгредієнти. Перевірте текст.');
-      setTimeout(() => setSmartError(''), 3000);
-    }
-  };
-
-  const handleAddIngredientRow = () => setNewRecipeIngredients([...newRecipeIngredients, { name: '', amount: '', unit: 'г' }]);
-  
-  const handleIngredientChange = (index, field, value) => {
-    const updated = [...newRecipeIngredients];
-    updated[index][field] = value;
-    setNewRecipeIngredients(updated);
-  };
-
-  const handleRemoveIngredientRow = (index) => setNewRecipeIngredients(newRecipeIngredients.filter((_, i) => i !== index));
+  // Best effort: a leftover file in Storage is harmless, a failed save is not.
+  const dropStoragePhoto = (photo) => (isStoragePhoto(photo) ? db.removeRecipePhoto(photo).catch(() => {}) : undefined);
 
   const handleSaveRecipe = async () => {
-    if (!newRecipeName.trim()) return;
-    const validIngredients = newRecipeIngredients.filter(ing => ing.name.trim() && ing.amount);
-    const recipe = {
-      name: newRecipeName.trim(),
-      mealType: recipeMeta.mealType,
-      minutes: recipeMeta.minutes === '' ? null : Number(recipeMeta.minutes),
-      kcal: recipeMeta.kcal === '' ? null : Number(recipeMeta.kcal),
-      vegetarian: recipeMeta.vegetarian,
-      photo: recipeMeta.photo,
-      description: recipeMeta.description.trim(),
-      ingredients: validIngredients.map(ing => ({
-        name: ing.name.trim(),
-        amount: parseFloat(ing.amount),
-        unit: ing.unit,
-      })),
-    };
+    const { draft, original } = form;
+    if (!draft.name.trim() || saving) return;
+    if (!isValidUrl(draft.sourceUrl)) {
+      setSaveError('Посилання на джерело має починатися з http:// або https://');
+      return;
+    }
 
+    setSaving(true);
+    setSaveError('');
+    const recipe = form.toRecipe();
+    let uploaded = null;
     try {
+      if (draft.photoFile) {
+        uploaded = await db.uploadRecipePhoto(userId, draft.photoFile);
+        recipe.photo = uploaded;
+      }
       let id = editingRecipeId;
       if (id) await db.updateRecipe(id, recipe);
       else id = await db.createRecipe(userId, recipe);
       setRecipesDb(prev => ({ ...prev, [id]: { favorite: false, ...prev[id], ...recipe } }));
+      if (original?.photo && original.photo !== recipe.photo) dropStoragePhoto(original.photo);
+      setIsAddRecipeModalOpen(false);
+      setEditingRecipeId(null);
     } catch (error) {
       console.error('Save recipe failed:', error);
-      load();
+      if (uploaded) dropStoragePhoto(uploaded);
+      setSaveError('Не вдалося зберегти страву. Спробуйте ще раз.');
     }
-
-    setIsAddRecipeModalOpen(false);
-    setEditingRecipeId(null);
+    setSaving(false);
   };
 
   const toggleFavorite = (recipeId) => {
@@ -268,10 +234,8 @@ export function usePlannerState(userId) {
     handlePersonsChange, handleMealSelect, handleClearPlan, toggleItemCheck,
     modal: {
       isAddRecipeModalOpen, setIsAddRecipeModalOpen, editingRecipeId,
-      newRecipeName, setNewRecipeName, newRecipeIngredients, recipeMeta, setRecipeMeta,
-      smartText, setSmartText, smartError,
-      handleOpenAddModal, handleOpenEditModal, handleSmartImport,
-      handleAddIngredientRow, handleIngredientChange, handleRemoveIngredientRow, handleSaveRecipe,
+      form, saving, saveError,
+      handleOpenAddModal, handleOpenEditModal, handleSaveRecipe,
       recipeToDelete, setRecipeToDelete, confirmDeleteRecipe,
     },
   };

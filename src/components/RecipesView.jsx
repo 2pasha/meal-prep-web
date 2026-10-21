@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { MEAL_TYPES, dishMeta } from '../lib/planner';
-import { img } from '../data/photos';
+import { MEAL_TYPES, dishMeta, matchesRecipe } from '../lib/planner';
+import { photoUrl } from '../data/photos';
 import { ArrowRight, ChevronDown, ClockIcon, FilterIcon, Heart, LeafIcon, Plus, SearchIcon } from './Icons';
 import { DishCard } from './DishCard';
 import { AddToPlanSheet } from './AddToPlanSheet';
@@ -10,12 +10,13 @@ const SORTS = { popular: 'Популярні', name: 'За назвою', quick:
 
 const chipClass = (active) => `flex items-center gap-1.5 whitespace-nowrap rounded-full border border-ink px-3.5 py-2 text-xs font-bold lg:px-4 lg:py-2.5 ${active ? 'bg-ink text-sun' : 'hover:bg-ink/5'}`;
 
-export function RecipesView({ recipesDb, planCounts, week, onEdit, onToggleFavorite, onAddToPlan }) {
+export function RecipesView({ recipesDb, planCounts, week, onOpen, onToggleFavorite, onAddToPlan }) {
   const [query, setQuery] = useState('');
   const [meal, setMeal] = useState('');
   const [quick, setQuick] = useState(false);
   const [veg, setVeg] = useState(false);
   const [fav, setFav] = useState(false);
+  const [tag, setTag] = useState('');
   const [sort, setSort] = useState('popular');
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [showFilters, setShowFilters] = useState(false);
@@ -23,16 +24,11 @@ export function RecipesView({ recipesDb, planCounts, week, onEdit, onToggleFavor
 
   const all = useMemo(() => Object.entries(recipesDb).map(([id, recipe], order) => ({ id, recipe, order })), [recipesDb]);
   const favCount = all.filter(r => r.recipe.favorite).length;
+  const allTags = useMemo(() => [...new Set(all.flatMap(r => r.recipe.tags ?? []))].sort((a, b) => a.localeCompare(b, 'uk')), [all]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = all.filter(({ recipe }) =>
-      (!meal || recipe.mealType === meal) &&
-      (!quick || (recipe.minutes && recipe.minutes <= 30)) &&
-      (!veg || recipe.vegetarian) &&
-      (!fav || recipe.favorite) &&
-      (!q || recipe.name.toLowerCase().includes(q) || recipe.ingredients.some(i => i.name.toLowerCase().includes(q)))
-    );
+    const filters = { query, meal, quick, veg, fav, tag };
+    const list = all.filter(({ recipe }) => matchesRecipe(recipe, filters));
     const popularity = (r) => (planCounts[r.id] || 0) * 10 + (r.recipe.favorite ? 1 : 0);
     const cmp = {
       popular: (a, b) => popularity(b) - popularity(a) || a.order - b.order,
@@ -40,7 +36,7 @@ export function RecipesView({ recipesDb, planCounts, week, onEdit, onToggleFavor
       quick: (a, b) => (a.recipe.minutes || 9999) - (b.recipe.minutes || 9999) || a.order - b.order,
     }[sort];
     return [...list].sort(cmp);
-  }, [all, query, meal, quick, veg, fav, sort, planCounts]);
+  }, [all, query, meal, quick, veg, fav, tag, sort, planCounts]);
 
   const featured = useMemo(() => {
     const score = (r) => (planCounts[r.id] || 0) * 100 + (r.recipe.favorite ? 10 : 0) + (r.recipe.description ? 1 : 0);
@@ -50,6 +46,8 @@ export function RecipesView({ recipesDb, planCounts, week, onEdit, onToggleFavor
   const withReset = (setter) => (value) => { setter(value); setLimit(PAGE_SIZE); };
   const setQ = withReset(setQuery), setM = withReset(setMeal), setS = withReset(setSort);
   const toggle = (setter) => () => { setter(v => !v); setLimit(PAGE_SIZE); };
+
+  const clearFilters = () => { setQuery(''); setMeal(''); setQuick(false); setVeg(false); setFav(false); setTag(''); setLimit(PAGE_SIZE); };
 
   const visible = filtered.slice(0, limit);
   const remaining = filtered.length - visible.length;
@@ -109,11 +107,19 @@ export function RecipesView({ recipesDb, planCounts, week, onEdit, onToggleFavor
         </div>
       </div>
 
+      {allTags.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto px-5 pb-4 lg:gap-2.5 lg:px-12" aria-label="Теги">
+          {allTags.map(t => (
+            <button key={t} onClick={() => { setTag(tag === t ? '' : t); setLimit(PAGE_SIZE); }} aria-pressed={tag === t} className={chipClass(tag === t)}>#{t}</button>
+          ))}
+        </div>
+      )}
+
       {featured && (
         <section className="border-y border-ink lg:grid lg:min-h-[520px] lg:grid-cols-2 lg:border-t-0">
           <div
             className="relative h-[230px] border-b border-ink bg-ink/10 bg-cover bg-center p-3.5 lg:h-auto lg:border-b-0"
-            style={featured.recipe.photo ? { backgroundImage: `url(${img(featured.recipe.photo)})` } : undefined}
+            style={featured.recipe.photo ? { backgroundImage: `url(${photoUrl(featured.recipe.photo)})` } : undefined}
           >
             <span className="inline-block -rotate-[4deg] rounded-full border border-ink bg-royal px-3.5 py-1.5 font-serif text-[17px] font-semibold text-white lg:hidden">страва тижня</span>
           </div>
@@ -134,7 +140,7 @@ export function RecipesView({ recipesDb, planCounts, week, onEdit, onToggleFavor
             <button onClick={() => setSheetFor(featured.id)} aria-label="Додати в план" className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-ink bg-sun lg:hidden"><Plus size={18} /></button>
             <div className="hidden items-center gap-3 lg:flex">
               <button onClick={() => setSheetFor(featured.id)} className="flex items-center gap-2 rounded-full border border-ink bg-sun px-6 py-3 text-[13px] font-bold hover:brightness-95"><Plus size={15} /> Додати в план</button>
-              <button onClick={() => onEdit(featured.id)} className="flex items-center gap-2 rounded-full border border-ink px-6 py-3 text-[13px] font-bold hover:bg-ink/5">Рецепт <ArrowRight size={15} /></button>
+              <button onClick={() => onOpen(featured.id)} className="flex items-center gap-2 rounded-full border border-ink px-6 py-3 text-[13px] font-bold hover:bg-ink/5">Рецепт <ArrowRight size={15} /></button>
             </div>
           </div>
         </section>
@@ -148,11 +154,14 @@ export function RecipesView({ recipesDb, planCounts, week, onEdit, onToggleFavor
           </span>
         </div>
         {filtered.length === 0 ? (
-          <p className="border-y border-ink py-12 text-center font-serif text-2xl text-muted">Нічого не знайдено — спробуйте інший запит чи фільтр.</p>
+          <div className="flex flex-col items-center gap-4 border-y border-ink py-12">
+            <p className="text-center font-serif text-2xl text-muted">Нічого не знайдено — спробуйте інший запит чи фільтр.</p>
+            <button onClick={clearFilters} className={chipClass(false)}>Скинути фільтри</button>
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-x-3.5 gap-y-5 lg:grid-cols-4 lg:gap-6">
             {visible.map(({ id, recipe }, i) => (
-              <DishCard key={id} id={id} recipe={recipe} number={i + 1} onEdit={onEdit} onToggleFavorite={onToggleFavorite} onAddToPlan={setSheetFor} />
+              <DishCard key={id} id={id} recipe={recipe} number={i + 1} onOpen={onOpen} onToggleFavorite={onToggleFavorite} onAddToPlan={setSheetFor} />
             ))}
           </div>
         )}

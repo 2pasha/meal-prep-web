@@ -241,7 +241,7 @@ const META_KEYS = ['mealType', 'minutes', 'kcal', 'vegetarian', 'photo', 'descri
 export const normalizeRecipe = (id, recipe) => {
   const seed = INITIAL_RECIPES_DB[id] || {};
   const seedMeta = Object.fromEntries(META_KEYS.filter(k => seed[k] !== undefined).map(k => [k, seed[k]]));
-  return { mealType: '', minutes: null, kcal: null, vegetarian: false, favorite: false, photo: null, description: '', ...seedMeta, ...recipe };
+  return { mealType: '', minutes: null, kcal: null, vegetarian: false, favorite: false, photo: null, description: '', steps: [], sourceUrl: '', tags: [], ...seedMeta, ...recipe };
 };
 
 export const normalizeRecipes = (db) => Object.fromEntries(Object.entries(db).map(([id, recipe]) => [id, normalizeRecipe(id, recipe)]));
@@ -267,4 +267,19 @@ export const formatQty = (amount, unit) => {
 export const dishMeta = (recipe) => {
   const parts = [recipe.minutes ? `${recipe.minutes} хв` : null, recipe.kcal ? `${recipe.kcal} ккал` : null].filter(Boolean);
   return parts.length ? parts.join(' · ') : `${recipe.ingredients.length} інгредієнтів`;
+};
+
+export const matchesRecipe = (recipe, { query = '', meal = '', quick = false, veg = false, fav = false, tag = '' } = {}) => {
+  const q = query.trim().toLowerCase();
+  return Boolean(
+    (!meal || recipe.mealType === meal) &&
+    (!quick || (recipe.minutes && recipe.minutes <= 30)) &&
+    (!veg || recipe.vegetarian) &&
+    (!fav || recipe.favorite) &&
+    (!tag || recipe.tags?.includes(tag)) &&
+    (!q ||
+      recipe.name.toLowerCase().includes(q) ||
+      recipe.tags?.some(t => t.includes(q)) ||
+      recipe.ingredients.some(i => i.name.toLowerCase().includes(q)))
+  );
 };

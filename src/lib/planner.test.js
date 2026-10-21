@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getCategoryForIngredient, parseSmartText, formatQty } from './planner'
+import { getCategoryForIngredient, parseSmartText, formatQty, matchesRecipe } from './planner'
 
 describe('parseSmartText', () => {
   it('returns nothing for blank input', () => {
@@ -43,5 +43,37 @@ describe('getCategoryForIngredient', () => {
 describe('formatQty', () => {
   it('returns a non-empty string', () => {
     expect(formatQty(150, 'г')).toEqual(expect.any(String))
+  })
+})
+
+describe('matchesRecipe', () => {
+  const recipe = {
+    name: 'Борщ український', mealType: 'Обід', minutes: 90, vegetarian: false, favorite: true, tags: ['святкове'],
+    ingredients: [{ name: 'Буряк', amount: 80, unit: 'г' }],
+  }
+
+  it('matches everything with no filters', () => {
+    expect(matchesRecipe(recipe)).toBe(true)
+  })
+
+  it('searches name, ingredients and tags case-insensitively', () => {
+    expect(matchesRecipe(recipe, { query: 'БОРЩ' })).toBe(true)
+    expect(matchesRecipe(recipe, { query: 'буряк' })).toBe(true)
+    expect(matchesRecipe(recipe, { query: 'святк' })).toBe(true)
+    expect(matchesRecipe(recipe, { query: 'піца' })).toBe(false)
+  })
+
+  it('combines filters', () => {
+    expect(matchesRecipe(recipe, { meal: 'Обід', fav: true })).toBe(true)
+    expect(matchesRecipe(recipe, { meal: 'Вечеря' })).toBe(false)
+    expect(matchesRecipe(recipe, { quick: true })).toBe(false)
+    expect(matchesRecipe(recipe, { veg: true })).toBe(false)
+    expect(matchesRecipe(recipe, { tag: 'святкове' })).toBe(true)
+    expect(matchesRecipe(recipe, { tag: 'швидко' })).toBe(false)
+  })
+
+  it('tolerates recipes without tags', () => {
+    expect(matchesRecipe({ ...recipe, tags: undefined }, { tag: 'x' })).toBe(false)
+    expect(matchesRecipe({ ...recipe, tags: undefined }, { query: 'борщ' })).toBe(true)
   })
 })

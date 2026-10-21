@@ -1,5 +1,12 @@
 export const img = (name) => `${import.meta.env.BASE_URL}images/${name}.jpg`;
 
+// recipes.photo is either a bundled photo key ("pasta") or a Storage path ("<user_id>/<file>.jpg").
+export const isStoragePhoto = (photo) => !!photo && photo.includes('/');
+export const photoUrl = (photo) =>
+  isStoragePhoto(photo)
+    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/recipe-photos/${photo}`
+    : img(photo);
+
 export const HERO_PHOTO = 'pizza';
 export const TODAY_FALLBACK_PHOTO = 'toast';
 
