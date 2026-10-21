@@ -1,5 +1,5 @@
 import { MEAL_TYPES } from '../lib/planner';
-import { getMealView, img, TODAY_FALLBACK_PHOTO } from '../data/photos';
+import { getMealView, photoUrl, TODAY_FALLBACK_PHOTO } from '../data/photos';
 import { ArrowRight } from './Icons';
 
 const EMPTY_NOTE = { 'Сніданок': 'Сніданок ще порожній', 'Обід': 'Обід ще порожній', 'Вечеря': 'Вечеря ще порожня' };
@@ -49,7 +49,7 @@ export function TodayPanel({ today, plan, recipesDb, onPick }) {
           )}
         </div>
       </div>
-      <div className="bg-cover bg-center" style={{ backgroundImage: `url(${img(photo)})` }} />
+      <div className="bg-cover bg-center" style={{ backgroundImage: `url(${photoUrl(photo)})` }} />
     </section>
   );
 }

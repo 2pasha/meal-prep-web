@@ -46,6 +46,12 @@ export default defineConfig({
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'dish-photos', expiration: { maxEntries: 60 } },
           },
+          {
+            // Uploaded recipe photos live on the Supabase origin; <img>/CSS loads are no-cors, hence status 0.
+            urlPattern: ({ url }) => url.pathname.startsWith('/storage/v1/object/public/recipe-photos/'),
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'recipe-photos', expiration: { maxEntries: 100 }, cacheableResponse: { statuses: [0, 200] } },
+          },
         ],
       },
     }),

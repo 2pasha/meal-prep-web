@@ -5,7 +5,11 @@ import { DAYS_OF_WEEK, MEAL_TYPES } from './planner';
 const MEAL_TO_DB = { 'Сніданок': 'breakfast', 'Обід': 'lunch', 'Вечеря': 'dinner' };
 const MEAL_FROM_DB = Object.fromEntries(Object.entries(MEAL_TO_DB).map(([ui, db]) => [db, ui]));
 
-const text = (json) => json?.uk ?? Object.values(json ?? {})[0] ?? '';
+const localized = (json, fallback) => json?.uk ?? Object.values(json ?? {})[0] ?? fallback;
+const text = (json) => localized(json, '');
+const list = (json) => localized(json, []);
+
+const PHOTO_BUCKET = 'recipe-photos';
 
 export const emptyPlan = () =>
   Object.fromEntries(DAYS_OF_WEEK.map(day => [day, Object.fromEntries(MEAL_TYPES.map(meal => [meal, '']))]));
@@ -19,12 +23,15 @@ export const rowToRecipe = (row) => ({
   vegetarian: row.vegetarian,
   favorite: row.favorite,
   photo: row.photo,
+  steps: list(row.steps),
+  sourceUrl: row.source_url ?? '',
+  tags: row.tags ?? [],
   ingredients: [...(row.recipe_ingredients ?? [])]
     .sort((a, b) => a.position - b.position)
     .map(i => ({ name: text(i.name), amount: Number(i.amount), unit: i.unit })),
 });
 
-const recipeToRow = (recipe) => ({
+export const recipeToRow = (recipe) => ({
   name: { uk: recipe.name },
   description: recipe.description ? { uk: recipe.description } : null,
   meal_type: MEAL_TO_DB[recipe.mealType] ?? null,
@@ -32,6 +39,9 @@ const recipeToRow = (recipe) => ({
   kcal: recipe.kcal,
   vegetarian: recipe.vegetarian,
   photo: recipe.photo,
+  steps: recipe.steps?.length ? { uk: recipe.steps } : null,
+  source_url: recipe.sourceUrl || null,
+  tags: recipe.tags ?? [],
 });
 
 const ingredientRows = (recipeId, ingredients) =>
@@ -96,6 +106,14 @@ export async function updateRecipe(id, recipe) {
 }
 
 export const deleteRecipe = async (id) => check(await supabase.from('recipes').delete().eq('id', id));
+
+export async function uploadRecipePhoto(userId, blob) {
+  const path = `${userId}/${crypto.randomUUID()}.jpg`;
+  check(await supabase.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000' }));
+  return path;
+}
+
+export const removeRecipePhoto = async (path) => check(await supabase.storage.from(PHOTO_BUCKET).remove([path]));
 
 export const setFavorite = async (id, favorite) => check(await supabase.from('recipes').update({ favorite }).eq('id', id));
 

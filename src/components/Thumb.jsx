@@ -1,4 +1,4 @@
-import { img } from '../data/photos';
+import { photoUrl } from '../data/photos';
 import { Plus } from './Icons';
 
 export function Thumb({ meal, size = 52, className = '' }) {
@@ -7,7 +7,7 @@ export function Thumb({ meal, size = 52, className = '' }) {
     return (
       <span
         className={`shrink-0 rounded-full border border-ink bg-cover bg-center ${className}`}
-        style={{ ...dim, backgroundImage: `url(${img(meal.photo)})` }}
+        style={{ ...dim, backgroundImage: `url(${photoUrl(meal.photo)})` }}
       />
     );
   }

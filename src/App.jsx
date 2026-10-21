@@ -13,6 +13,7 @@ import { MealPicker } from './components/MealPicker';
 import { ShoppingListView } from './components/ShoppingListView';
 import { RecipesView } from './components/RecipesView';
 import { RecipeModal } from './components/RecipeModal';
+import { RecipeDetail } from './components/RecipeDetail';
 import { DeleteModal } from './components/DeleteModal';
 import { LoginScreen } from './components/LoginScreen';
 import { useSession, signOut } from './hooks/useSession';
@@ -23,6 +24,7 @@ function MealPlannerApp({ userId }) {
   const [activeTab, setActiveTab] = useState('plan'); // 'plan', 'list', 'meals'
   const [mobileView, setMobileView] = useState('today'); // 'today', 'week'
   const [picker, setPicker] = useState(null);
+  const [detailId, setDetailId] = useState(null);
 
   const week = useMemo(() => getWeekInfo(), []);
 
@@ -105,7 +107,7 @@ function MealPlannerApp({ userId }) {
           recipesDb={recipesDb}
           planCounts={planner.planCounts}
           week={week}
-          onEdit={modal.handleOpenEditModal}
+          onOpen={setDetailId}
           onToggleFavorite={planner.toggleFavorite}
           onAddToPlan={planner.handleMealSelect}
         />
@@ -114,6 +116,12 @@ function MealPlannerApp({ userId }) {
       <MobileTabBar current={mobileCurrent} onChange={handleMobileTab} onCreate={modal.handleOpenAddModal} />
 
       {picker && <MealPicker target={picker} plan={plan} recipesDb={recipesDb} onSelect={handleSelectMeal} onClose={() => setPicker(null)} />}
+      {detailId && recipesDb[detailId] && (
+        <RecipeDetail
+          recipe={recipesDb[detailId]} persons={persons} onClose={() => setDetailId(null)}
+          onEdit={() => { modal.handleOpenEditModal(detailId); setDetailId(null); }}
+        />
+      )}
       {modal.isAddRecipeModalOpen && <RecipeModal modal={modal} />}
       {modal.recipeToDelete && <DeleteModal modal={modal} recipesDb={recipesDb} />}
     </div>

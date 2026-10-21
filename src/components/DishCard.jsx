@@ -1,17 +1,17 @@
-import { img } from '../data/photos';
+import { photoUrl } from '../data/photos';
 import { dishMeta } from '../lib/planner';
 import { Heart, Plus } from './Icons';
 
 const MEAL_TONE = { 'Сніданок': 'bg-sun/70', 'Обід': 'bg-royal/20', 'Вечеря': 'bg-ink/10' };
 const MEAL_EMOJI = { 'Сніданок': '🥞', 'Обід': '🍲', 'Вечеря': '🍽️' };
 
-export function DishCard({ id, recipe, number, onEdit, onToggleFavorite, onAddToPlan }) {
+export function DishCard({ id, recipe, number, onOpen, onToggleFavorite, onAddToPlan }) {
   const meta = dishMeta(recipe);
   return (
     <article className="flex flex-col gap-2.5 lg:gap-3.5">
       <div
         className={`relative flex h-[190px] flex-col justify-between border border-ink bg-cover bg-center p-2.5 lg:h-[300px] lg:p-3.5 ${recipe.photo ? '' : (MEAL_TONE[recipe.mealType] || 'bg-ink/5')}`}
-        style={recipe.photo ? { backgroundImage: `url(${img(recipe.photo)})` } : undefined}
+        style={recipe.photo ? { backgroundImage: `url(${photoUrl(recipe.photo)})` } : undefined}
       >
         {!recipe.photo && (
           <span aria-hidden className="absolute inset-0 flex items-center justify-center text-6xl">{MEAL_EMOJI[recipe.mealType] || '🍽️'}</span>
@@ -39,7 +39,7 @@ export function DishCard({ id, recipe, number, onEdit, onToggleFavorite, onAddTo
         <span className="hidden pt-1 font-head text-[11px] font-medium lg:block">{String(number).padStart(2, '0')}.</span>
         <div className="flex min-w-0 flex-1 flex-col gap-[3px] lg:gap-1">
           {recipe.mealType && <span className="text-[9px] font-bold tracking-[0.11em] text-muted lg:hidden">{recipe.mealType.toUpperCase()}</span>}
-          <button onClick={() => onEdit(id)} className="text-left font-serif text-[21px] font-semibold leading-[1.05] hover:underline lg:text-[27px] lg:font-medium">{recipe.name}</button>
+          <button onClick={() => onOpen(id)} className="text-left font-serif text-[21px] font-semibold leading-[1.05] hover:underline lg:text-[27px] lg:font-medium">{recipe.name}</button>
           <span className="text-[11px] font-semibold text-muted lg:text-xs">{meta}</span>
         </div>
       </div>
